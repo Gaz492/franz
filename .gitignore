@@ -7,3 +7,5 @@ build
 .stage
 .env
 yarn-error.log
+
+\.idea/
