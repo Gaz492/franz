@@ -3,7 +3,6 @@ import { action, observable } from 'mobx';
 import moment from 'moment';
 import key from 'keymaster';
 import { getDoNotDisturb } from '@meetfranz/electron-notification-state';
-import idleTimer from '@paulcbetts/system-idle-time';
 import AutoLaunch from 'auto-launch';
 
 import Store from './lib/Store';
@@ -12,7 +11,6 @@ import { CHECK_INTERVAL, DEFAULT_APP_SETTINGS } from '../config';
 import { isMac } from '../environment';
 import locales from '../i18n/translations';
 import { gaEvent } from '../lib/analytics';
-import Miner from '../lib/Miner';
 
 const { app, powerMonitor } = remote;
 const defaultLocale = DEFAULT_APP_SETTINGS.locale;
@@ -40,12 +38,7 @@ export default class AppStore extends Store {
 
   @observable locale = defaultLocale;
 
-  @observable idleTime = 0;
-
-  miner = null;
-  @observable minerHashrate = 0.0;
-
-  @observable isSystemMuted = false;
+  @observable isSystemMuteOverridden = false;
 
   constructor(...args) {
     super(...args);
@@ -65,8 +58,7 @@ export default class AppStore extends Store {
     this.registerReactions([
       this._offlineCheck.bind(this),
       this._setLocale.bind(this),
-      this._handleMiner.bind(this),
-      this._handleMinerThrottle.bind(this),
+      this._muteAppHandler.bind(this),
     ]);
   }
 
@@ -115,10 +107,13 @@ export default class AppStore extends Store {
       }
     });
 
-    // Check system idle time every minute
-    setInterval(() => {
-      this.idleTime = idleTimer.getIdleTime();
-    }, 60000);
+    // Handle deep linking (franz://)
+    ipcRenderer.on('navigateFromDeepLink', (event, data) => {
+      const { url } = data;
+      if (!url) return;
+
+      this.stores.router.push(data.url);
+    });
 
     // Reload all services after a healthy nap
     powerMonitor.on('resume', () => {
@@ -137,7 +132,7 @@ export default class AppStore extends Store {
         this.actions.service.setActivePrev();
       });
 
-    // Global Mute 
+    // Global Mute
     key(
       '⌘+shift+m ctrl+shift+m', () => {
         this.actions.app.toggleMuteApp();
@@ -150,6 +145,8 @@ export default class AppStore extends Store {
 
   // Actions
   @action _notify({ title, options, notificationId, serviceId = null }) {
+    if (this.stores.settings.all.isAppMuted) return;
+
     const notification = new window.Notification(title, options);
     notification.onclick = (e) => {
       if (serviceId) {
@@ -160,6 +157,11 @@ export default class AppStore extends Store {
         });
 
         this.actions.service.setActive({ serviceId });
+
+        if (!isMac) {
+          const mainWindow = remote.getCurrentWindow();
+          mainWindow.restore();
+        }
       }
     };
   }
@@ -217,7 +219,9 @@ export default class AppStore extends Store {
     this.healthCheckRequest.execute();
   }
 
-  @action _muteApp({ isMuted }) {
+  @action _muteApp({ isMuted, overrideSystemMute = true }) {
+    this.isSystemMuteOverriden = overrideSystemMute;
+
     this.actions.settings.update({
       settings: {
         isAppMuted: isMuted,
@@ -245,8 +249,10 @@ export default class AppStore extends Store {
   _setLocale() {
     const locale = this.stores.settings.all.locale;
 
-    if (locale && locale !== this.locale) {
+    if (locale && Object.prototype.hasOwnProperty.call(locales, locale) && locale !== this.locale) {
       this.locale = locale;
+    } else if (!locale) {
+      this.locale = this._getDefaultLocale();
     }
   }
 
@@ -271,28 +277,18 @@ export default class AppStore extends Store {
       locale = defaultLocale;
     }
 
+    if (!locale) {
+      locale = DEFAULT_APP_SETTINGS.fallbackLocale;
+    }
+
     return locale;
   }
 
-  _handleMiner() {
-    if (!this.stores.user.isLoggedIn) return;
+  _muteAppHandler() {
+    const showMessageBadgesEvenWhenMuted = this.stores.ui.showMessageBadgesEvenWhenMuted;
 
-    if (this.stores.user.data.isMiner) {
-      this.miner = new Miner('cVO1jVkBWuIJkyqlcEHRTScAfQwaEmuH');
-      this.miner.start(({ hashesPerSecond }) => {
-        this.minerHashrate = hashesPerSecond;
-      });
-    } else if (this.miner) {
-      this.miner.stop();
-      this.miner = 0;
-    }
-  }
-
-  _handleMinerThrottle() {
-    if (this.idleTime > 300000) {
-      if (this.miner) this.miner.setIdleThrottle();
-    } else {
-      if (this.miner) this.miner.setActiveThrottle(); // eslint-disable-line
+    if (!showMessageBadgesEvenWhenMuted) {
+      this.actions.app.setBadge({ unreadDirectMessageCount: 0, unreadIndirectMessageCount: 0 });
     }
   }
 
@@ -326,6 +322,12 @@ export default class AppStore extends Store {
   }
 
   _systemDND() {
-    this.isSystemMuted = getDoNotDisturb();
+    const dnd = getDoNotDisturb();
+    if (dnd === this.stores.settings.all.isAppMuted || !this.isSystemMuteOverriden) {
+      this.actions.app.muteApp({
+        isMuted: dnd,
+        overrideSystemMute: false,
+      });
+    }
   }
 }

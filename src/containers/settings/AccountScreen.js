@@ -32,14 +32,6 @@ export default class AccountScreen extends Component {
     payment.plansRequest.reload();
   }
 
-  stopMiner() {
-    const { update } = this.props.actions.user;
-
-    update({ userData: {
-      isMiner: false,
-    } });
-  }
-
   async handlePaymentDashboard() {
     const { actions, stores } = this.props;
 
@@ -69,6 +61,7 @@ export default class AccountScreen extends Component {
   render() {
     const { user, payment, app } = this.props.stores;
     const { openExternalUrl } = this.props.actions.app;
+    const { user: userActions } = this.props.actions;
 
     const isLoadingUserInfo = user.getUserInfoRequest.isExecuting;
     const isLoadingOrdersInfo = payment.ordersDataRequest.isExecuting;
@@ -78,7 +71,6 @@ export default class AccountScreen extends Component {
       <AccountDashboard
         user={user.data}
         orders={payment.orders}
-        hashrate={app.minerHashrate}
         isLoading={isLoadingUserInfo}
         isLoadingOrdersInfo={isLoadingOrdersInfo}
         isLoadingPlans={isLoadingPlans}
@@ -88,7 +80,9 @@ export default class AccountScreen extends Component {
         openDashboard={price => this.handlePaymentDashboard(price)}
         openExternalUrl={url => openExternalUrl({ url })}
         onCloseSubscriptionWindow={() => this.onCloseWindow()}
-        stopMiner={() => this.stopMiner()}
+        deleteAccount={userActions.delete}
+        isLoadingDeleteAccount={user.deleteAccountRequest.isExecuting}
+        isDeleteAccountSuccessful={user.deleteAccountRequest.wasExecuted && !user.deleteAccountRequest.isError}
       />
     );
   }
@@ -109,6 +103,7 @@ AccountScreen.wrappedComponent.propTypes = {
     }).isRequired,
     user: PropTypes.shape({
       update: PropTypes.func.isRequired,
+      delete: PropTypes.func.isRequired,
     }).isRequired,
   }).isRequired,
 };

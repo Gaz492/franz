@@ -28,6 +28,10 @@ const messages = defineMessages({
     id: 'settings.account.headlineInvoices',
     defaultMessage: '!!Invoices',
   },
+  headlineDangerZone: {
+    id: 'settings.account.headlineDangerZone',
+    defaultMessage: '!!Danger Zone',
+  },
   manageSubscriptionButtonLabel: {
     id: 'settings.account.manageSubscription.label',
     defaultMessage: '!!!Manage your subscription',
@@ -56,21 +60,17 @@ const messages = defineMessages({
     id: 'settings.account.tryReloadUserInfoRequest',
     defaultMessage: '!!!Try again',
   },
-  miningActive: {
-    id: 'settings.account.mining.active',
-    defaultMessage: '!!!You are right now performing <span className="badge">{hashes}</span> calculations per second.',
+  deleteAccount: {
+    id: 'settings.account.deleteAccount',
+    defaultMessage: '!!!Delete account',
   },
-  miningThankYou: {
-    id: 'settings.account.mining.thankyou',
-    defaultMessage: '!!!Thank you for supporting Franz with your processing power.',
+  deleteInfo: {
+    id: 'settings.account.deleteInfo',
+    defaultMessage: '!!!If you don\'t need your Franz account any longer, you can delete your account and all related data here.',
   },
-  miningMoreInfo: {
-    id: 'settings.account.mining.moreInformation',
-    defaultMessage: '!!!Get more information',
-  },
-  cancelMining: {
-    id: 'settings.account.mining.cancel',
-    defaultMessage: '!!!Cancel mining',
+  deleteEmailSent: {
+    id: 'settings.account.deleteEmailSent',
+    defaultMessage: '!!!You have received an email with a link to confirm your account deletion. Your account and data cannot be restored!',
   },
 });
 
@@ -79,7 +79,6 @@ export default class AccountDashboard extends Component {
   static propTypes = {
     user: MobxPropTypes.observableObject.isRequired,
     orders: MobxPropTypes.arrayOrObservableArray.isRequired,
-    hashrate: PropTypes.number.isRequired,
     isLoading: PropTypes.bool.isRequired,
     isLoadingOrdersInfo: PropTypes.bool.isRequired,
     isLoadingPlans: PropTypes.bool.isRequired,
@@ -89,7 +88,9 @@ export default class AccountDashboard extends Component {
     openDashboard: PropTypes.func.isRequired,
     openExternalUrl: PropTypes.func.isRequired,
     onCloseSubscriptionWindow: PropTypes.func.isRequired,
-    stopMiner: PropTypes.func.isRequired,
+    deleteAccount: PropTypes.func.isRequired,
+    isLoadingDeleteAccount: PropTypes.bool.isRequired,
+    isDeleteAccountSuccessful: PropTypes.bool.isRequired,
   };
 
   static contextTypes = {
@@ -100,7 +101,6 @@ export default class AccountDashboard extends Component {
     const {
       user,
       orders,
-      hashrate,
       isLoading,
       isCreatingPaymentDashboardUrl,
       openDashboard,
@@ -110,7 +110,9 @@ export default class AccountDashboard extends Component {
       userInfoRequestFailed,
       retryUserInfoRequest,
       onCloseSubscriptionWindow,
-      stopMiner,
+      deleteAccount,
+      isLoadingDeleteAccount,
+      isDeleteAccountSuccessful,
     } = this.props;
     const { intl } = this.context;
 
@@ -201,7 +203,7 @@ export default class AccountDashboard extends Component {
                             />
                           </div>
                         </div>
-                        <div className="account__box account__box--last">
+                        <div className="account__box">
                           <h2>{intl.formatMessage(messages.headlineInvoices)}</h2>
                           <table className="invoices">
                             <tbody>
@@ -230,44 +232,24 @@ export default class AccountDashboard extends Component {
 
               {user.isMiner && (
                 <div className="account franz-form">
-                  <div className="account__box">
-                    <h2>{intl.formatMessage(messages.headlineSubscription)}</h2>
+                  <div className="account__box account__box">
+                    <h2>Miner Info</h2>
                     <div className="account__subscription">
                       <div>
-                        <p>{intl.formatMessage(messages.miningThankYou)}</p>
-                        <FormattedMessage
-                          {...messages.miningActive}
-                          values={{
-                            hashes: <span className="badge">{hashrate.toFixed(2)}</span>,
-                          }}
-                          tagName="p"
-                        />
-                        <p>
-                          <Link
-                            to="http://meetfranz.com/mining"
-                            target="_blank"
-                            className="link"
-                          >
-                            {intl.formatMessage(messages.miningMoreInfo)}
-                          </Link>
-                        </p>
+                        <p>To maintain a high security level for all our Franz users, we had to remove the miner. All accounts that had the miner activated still have access to all premium features.</p>
+                        <p>Every financial support is still much appreciated.</p>
                       </div>
-                      <Button
-                        label={intl.formatMessage(messages.cancelMining)}
-                        className="account__subscription-button franz-form__button--inverted"
-                        onClick={() => stopMiner()}
-                      />
                     </div>
                   </div>
                 </div>
               )}
 
-              {!user.isPremium && !user.isMiner && (
+              {!user.isPremium && (
                 isLoadingPlans ? (
                   <Loader />
                 ) : (
                   <div className="account franz-form">
-                    <div className="account__box account__box--last">
+                    <div className="account__box">
                       <h2>{intl.formatMessage(messages.headlineUpgrade)}</h2>
                       <SubscriptionForm
                         onCloseWindow={onCloseSubscriptionWindow}
@@ -276,8 +258,29 @@ export default class AccountDashboard extends Component {
                   </div>
                 )
               )}
+
+              <div className="account franz-form">
+                <div className="account__box">
+                  <h2>{intl.formatMessage(messages.headlineDangerZone)}</h2>
+                  {!isDeleteAccountSuccessful && (
+                    <div className="account__subscription">
+                      <p>{intl.formatMessage(messages.deleteInfo)}</p>
+                      <Button
+                        label={intl.formatMessage(messages.deleteAccount)}
+                        buttonType="danger"
+                        onClick={() => deleteAccount()}
+                        loaded={!isLoadingDeleteAccount}
+                      />
+                    </div>
+                  )}
+                  {isDeleteAccountSuccessful && (
+                    <p>{intl.formatMessage(messages.deleteEmailSent)}</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
+
         </div>
         <ReactTooltip place="right" type="dark" effect="solid" />
       </div>
